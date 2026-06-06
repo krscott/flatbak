@@ -139,7 +139,14 @@ def load_config(config_dir: Path, *, create: bool) -> Config:
 def parse_yaml_config(path: Path) -> dict[Scope, list[str]]:
     result: dict[Scope, list[str]] = {"user": [], "system": []}
 
-    data: object = yaml.safe_load(path.read_text())
+    try:
+        text = path.read_text()
+    except OSError as error:
+        raise ValueError(f"Invalid config {path}: could not read file") from error
+    try:
+        data: object = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise ValueError(f"Invalid config {path}: invalid YAML") from error
     if data is None:
         return result
     if not isinstance(data, dict):

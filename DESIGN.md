@@ -50,6 +50,8 @@ The config directory MUST be created if missing before writing config files.
 - Config files MUST use a `.yml` or `.yaml` extension.
 - All YAML config files in this software's config dir are merged when evaluated.
 - Duplicate entries in the same scope are treated as one desired app.
+- Config files that cannot be read, including broken symlinks, MUST fail with a
+  clear error message rather than a traceback.
 
 ### Config Format
 

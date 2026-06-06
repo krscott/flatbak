@@ -107,6 +107,24 @@ def test_load_config_rejects_unknown_top_level_yaml_key(tmp_path: Path) -> None:
         load_config(config_dir, create=False)
 
 
+def test_load_config_rejects_broken_yaml_symlink(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "common.yml").symlink_to(tmp_path / "missing.yml")
+
+    with pytest.raises(ValueError, match="could not read file"):
+        load_config(config_dir, create=False)
+
+
+def test_load_config_rejects_invalid_yaml(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "bad.yml").write_text("user: [org.mozilla.firefox\n")
+
+    with pytest.raises(ValueError, match="invalid YAML"):
+        load_config(config_dir, create=False)
+
+
 def test_load_config_accepts_standard_yaml_forms(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
