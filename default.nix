@@ -25,7 +25,7 @@ buildPythonPackage {
   ];
 
   # Skip integration tests during build (they require the installed executable)
-  pytestFlags = [ "-m 'not integration'" ];
+  disabledTestMarks = [ "integration" ];
 
   # pythonImportsCheck = [ "flatbak" ];
 
