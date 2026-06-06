@@ -378,6 +378,36 @@ def test_reconcile_fails_if_installed_app_is_not_reported_after_install(
     assert not paths.data_dir.exists()
 
 
+def test_reconcile_rejects_wrong_branch_after_qualified_install(
+    tmp_path: Path,
+) -> None:
+    paths = Paths(config_dir=tmp_path / "config", data_dir=tmp_path / "data")
+    paths.config_dir.mkdir()
+    (paths.config_dir / "root.txt").write_text(
+        "app/org.mozilla.firefox/x86_64/stable\n"
+    )
+
+    class WrongBranchAfterInstallFlatpak(FakeFlatpak):
+        def install(self, entry: object) -> None:
+            assert isinstance(entry, ConfigEntry)
+            self.installs.append(f"{entry.remote or 'flathub'} {entry.ref}")
+            self.apps.append(
+                InstalledApp(
+                    app_id=entry.app_id,
+                    remote=entry.effective_remote,
+                    arch="x86_64",
+                    branch="beta",
+                )
+            )
+
+    flatpak = WrongBranchAfterInstallFlatpak([])
+
+    with pytest.raises(ValueError, match="not reported"):
+        reconcile(Options(), paths, flatpak)
+
+    assert not paths.data_dir.exists()
+
+
 def test_reconcile_removes_mismatched_remote_before_installing_configured_ref(
     tmp_path: Path,
 ) -> None:

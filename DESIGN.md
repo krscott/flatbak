@@ -161,6 +161,12 @@ installed app as reported by Flatpak, including the resolved installed ref when
 available. Persisted state MUST NOT assume that the configured value is identical
 to the resolved installed ref.
 
+Post-install verification MUST use the same matching semantics as normal
+reconciliation. Bare app IDs match by app ID. Qualified refs MUST match their
+qualified details, including remote and branch. A reported app with the same app
+ID but a different remote or branch MUST NOT be accepted as a successful install
+for a qualified config entry.
+
 Standard operation MUST be idempotent. Running the software repeatedly with the
 same installed apps and config MUST result in no additional changes after the
 first successful reconciliation.
