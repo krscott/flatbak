@@ -26,21 +26,26 @@ integration tests. Wherever possible, tests SHOULD be implemented first
 
 ## Requirements
 
-### Flatpak install scope
+### Install Scope
 
 By default, the software manages user Flatpak installs only. Flatpak commands MUST
 operate on the user installation unless the user explicitly selects another scope.
 
-### Config files
+### Config Paths
 
 The software uses `$XDG_CONFIG_HOME/flatbak` as its config directory. If
 `XDG_CONFIG_HOME` is unset, it uses `~/.config/flatbak`.
 
 The config directory MUST be created if missing before writing config files.
 
-#### Format
+### Config File Selection
 
 - Config files MUST use a `.txt` extension.
+- All `.txt` config files in this software's config dir are merged when evaluated.
+- Duplicate entries are treated as one desired app.
+
+### Config Line Parsing
+
 - Each non-empty line contains one desired Flatpak app.
 - Leading and trailing whitespace is stripped.
 - Empty lines are ignored.
@@ -48,6 +53,8 @@ The config directory MUST be created if missing before writing config files.
 - Inline comments starting with ` #` are ignored after the desired app value.
   A `#` character without leading whitespace is parsed as part of the value, but
   the resulting value MAY still fail Flatpak app ID or ref validation.
+
+### Config Entry Forms
 
 Config entries MAY be either bare Flatpak app IDs or qualified Flatpak refs.
 
@@ -62,12 +69,7 @@ Bare app IDs MUST install from the `flathub` remote by default. Qualified refs
 MAY specify an alternate remote when needed, and SHOULD preserve remote, kind,
 architecture, and branch details.
 
-#### Multi-config
-
-All `.txt` config files in this software's config dir are merged when evaluated.
-Duplicate entries are treated as one desired app.
-
-#### Root config
+### Root Config
 
 A `root.txt` config is required, and created if missing. `root.txt` is the only
 config file the software writes during automatic adoption of installed apps.
@@ -75,14 +77,14 @@ config file the software writes during automatic adoption of installed apps.
 from `root.txt` into other config files, including symlinked config files shared
 across machines.
 
-### Persist state
+### State Path
 
 The software manages its persistent state in `$XDG_DATA_HOME/flatbak`. If
 `XDG_DATA_HOME` is unset, it uses `~/.local/share/flatbak`.
 
 State data manages known Flatpaks ("tracked").
 
-#### Format
+### State Format
 
 - State MUST be stored in `state.json`.
 - State files MUST use JSON.
@@ -91,17 +93,27 @@ State data manages known Flatpaks ("tracked").
 - Tracked apps SHOULD include the resolved installed ref when available.
 - Tracked apps SHOULD include the source config entry when available.
 
-### Standard operation
-
-The software performs these actions on a standard invocation
-
-#### Dry run
+### CLI Dry Run
 
 The CLI MUST provide a `--dry-run` option. Dry runs MUST report the changes that
 would be made without installing apps, uninstalling apps, writing config, or
 writing state.
 
-#### Preflight validation
+### Flatpak App Discovery
+
+The software manages Flatpak apps only. Runtime and extension installs SHOULD be
+left to Flatpak dependency resolution and MUST NOT be treated as desired config
+entries during automatic adoption.
+
+### Matching Rules
+
+Bare app IDs match by app ID.
+
+Qualified refs match by their qualified details, including remote and branch. If
+a different remote or branch is installed for a qualified config entry, it is not
+considered a match.
+
+### Preflight Validation
 
 Before making changes, the software SHOULD validate configured apps well enough
 to identify likely failures, such as invalid app IDs, invalid qualified refs, and
@@ -114,28 +126,17 @@ configured remote before uninstalling tracked apps. If a configured app cannot b
 resolved, reconciliation SHOULD fail before making install, uninstall, config, or
 state changes.
 
-#### App-only management
+### Standard Reconciliation
 
-The software manages Flatpak apps only. Runtime and extension installs SHOULD be
-left to Flatpak dependency resolution and MUST NOT be treated as desired config
-entries during automatic adoption.
+The software performs these actions on a standard invocation
 
-#### Adopt untracked installed Flatpaks
+#### Adopt Untracked Installed Flatpaks
 
 If a user-installed Flatpak app is not tracked and not present in config, it is
 added to `root.txt` and tracked. Automatically adopted apps SHOULD be written as
 bare app IDs unless a qualified ref is required to reproduce the install.
 
-#### Install missing flatpaks
-
-If config includes a Flatpak app that is not installed, install it into the user
-installation.
-
-Bare app IDs match by app ID. Qualified refs match by their qualified details,
-including remote and branch. If a different remote or branch is installed for a
-qualified config entry, it is not considered a match.
-
-#### Remove tracked apps no longer in config
+#### Remove Tracked Apps No Longer In Config
 
 If a user-installed Flatpak app is tracked but not present in config, uninstall
 it from the user installation and untrack it. This removal is automatic and MUST
@@ -151,10 +152,17 @@ keeps branch or remote changes simple: a tracked app whose installed qualified
 ref no longer matches config can be removed first, then installed from the
 configured ref.
 
-#### Track new Flatpaks
+#### Install Missing Flatpaks
+
+If config includes a Flatpak app that is not installed, install it into the user
+installation.
+
+#### Track Existing Configured Flatpaks
 
 If an installed Flatpak app is present in config but not tracked in state, track
 it.
+
+### Post-Install State
 
 After installing a Flatpak app, persisted state MUST describe the actual
 installed app as reported by Flatpak, including the resolved installed ref when
@@ -166,6 +174,8 @@ reconciliation. Bare app IDs match by app ID. Qualified refs MUST match their
 qualified details, including remote and branch. A reported app with the same app
 ID but a different remote or branch MUST NOT be accepted as a successful install
 for a qualified config entry.
+
+### Idempotency And Failure Handling
 
 Standard operation MUST be idempotent. Running the software repeatedly with the
 same installed apps and config MUST result in no additional changes after the
