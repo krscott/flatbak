@@ -68,9 +68,10 @@ system:
   - org.audacityteam.Audacity
 ```
 
-Missing `user` or `system` keys are treated as empty lists. A completely empty
-YAML file is treated as an empty mapping. Unknown top-level keys MUST fail
-validation with a clear message.
+Missing `user` or `system` keys are treated as empty lists. A `user:` or
+`system:` key with no value is treated as an empty list. A completely empty YAML
+file is treated as an empty mapping. Unknown top-level keys MUST fail validation
+with a clear message.
 
 Values under `user` and `system` MUST be YAML lists. Each list item MUST be a
 string. Non-list section values and non-string list items MUST fail validation

@@ -54,7 +54,7 @@ def test_cli_adopts_installed_app(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "adopt user:org.mozilla.firefox" in result.stdout
     assert (tmp_path / "config-home" / "flatbak" / "root.yml").read_text() == (
-        "user:\n  - org.mozilla.firefox\nsystem:\n"
+        "user:\n  - org.mozilla.firefox\nsystem: []\n"
     )
 
 

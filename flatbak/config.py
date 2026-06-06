@@ -157,6 +157,8 @@ def parse_yaml_config(path: Path) -> dict[Scope, list[str]]:
             scope = "system"
         else:
             raise ValueError(f"Invalid config {path}: unknown top-level key '{key}'")
+        if value is None:
+            continue
         if not isinstance(value, list):
             raise ValueError(f"Invalid config {path}: expected list value for {scope}")
         items = cast(list[object], value)
@@ -182,6 +184,9 @@ def format_yaml_config(entries: dict[Scope, list[str]]) -> str:
     lines: list[str] = []
     for scope in SCOPES:
         values = entries[scope]
+        if not values:
+            lines.append(f"{scope}: []")
+            continue
         lines.append(f"{scope}:")
         for value in values:
             lines.append(f"  - {value}")

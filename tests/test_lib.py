@@ -124,6 +124,20 @@ def test_load_config_accepts_standard_yaml_forms(tmp_path: Path) -> None:
     ]
 
 
+def test_load_config_treats_empty_scope_as_empty_list(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "root.yml").write_text(
+        "user:\n" "system:\n" "  - org.audacityteam.Audacity\n"
+    )
+
+    config = load_config(config_dir, create=False)
+
+    assert [(entry.scope, entry.value) for entry in config.entries] == [
+        ("system", "org.audacityteam.Audacity"),
+    ]
+
+
 def test_load_config_rejects_non_list_scope_value(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
