@@ -37,6 +37,15 @@ class InstalledApp:
                 arch=arch,
                 branch=branch,
             )
+        if len(parts) == 3:
+            app_id, arch, branch = parts
+            return InstalledApp(
+                scope=scope,
+                app_id=app_id,
+                remote=remote,
+                arch=arch,
+                branch=branch,
+            )
         return InstalledApp(scope=scope, app_id=ref, remote=remote)
 
 

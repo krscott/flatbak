@@ -127,11 +127,18 @@ The CLI MUST provide a `--dry-run` option. Dry runs MUST report the changes that
 would be made without installing apps, uninstalling apps, writing config, or
 writing state.
 
+The application MUST support both the installed `flatbak` console script and
+`python -m flatbak` as equivalent CLI entry points.
+
 ### Flatpak App Discovery
 
 The software manages Flatpak apps only. Runtime and extension installs SHOULD be
 left to Flatpak dependency resolution and MUST NOT be treated as desired config
 entries during automatic adoption.
+
+Installed app discovery MUST accept Flatpak refs reported both as
+`app/<app-id>/<arch>/<branch>` and `<app-id>/<arch>/<branch>`. Both forms
+describe the same installed app identity.
 
 ### Matching Rules
 

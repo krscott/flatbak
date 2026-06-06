@@ -130,3 +130,7 @@ class EnvAction(argparse.Action):
             setattr(namespace, self.dest, True)
         else:
             setattr(namespace, self.dest, values)
+
+
+if __name__ == "__main__":
+    main()

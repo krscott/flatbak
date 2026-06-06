@@ -60,6 +60,22 @@ class FakeFlatpak(Flatpak):
         self.uninstalls.append(f"{scope} {ref}")
 
 
+def test_installed_app_parses_flatpak_list_ref_without_kind() -> None:
+    app = InstalledApp.from_ref(
+        "org.audacityteam.Audacity/x86_64/stable",
+        remote="flathub",
+        scope="system",
+    )
+
+    assert app == InstalledApp(
+        scope="system",
+        app_id="org.audacityteam.Audacity",
+        remote="flathub",
+        arch="x86_64",
+        branch="stable",
+    )
+
+
 def test_load_config_merges_yaml_files_and_deduplicates_by_scope(
     tmp_path: Path,
 ) -> None:

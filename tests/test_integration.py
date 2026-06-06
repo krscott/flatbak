@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,7 @@ def fake_flatpak(tmp_path: Path) -> Path:
         f"log = Path({str(log)!r})\n"
         "args = sys.argv[1:]\n"
         "if args[:4] == ['list', '--user', '--app', '--columns=application,origin,ref']:\n"
-        "    print('org.mozilla.firefox\\tflathub\\tapp/org.mozilla.firefox/x86_64/stable')\n"
+        "    print('org.mozilla.firefox\\tflathub\\torg.mozilla.firefox/x86_64/stable')\n"
         "elif args[:4] == ['list', '--system', '--app', '--columns=application,origin,ref']:\n"
         "    pass\n"
         "elif args[:3] == ['remotes', '--user', '--columns=name']:\n"
@@ -73,6 +74,25 @@ def test_cli_dry_run_does_not_write(tmp_path: Path) -> None:
     assert "Would adopt user:org.mozilla.firefox" in result.stdout
     assert not (tmp_path / "config-home").exists()
     assert not (tmp_path / "data-home").exists()
+
+
+@pytest.mark.integration
+def test_module_dry_run_invokes_cli(tmp_path: Path) -> None:
+    bin_dir = fake_flatpak(tmp_path)
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "config-home")
+    env["XDG_DATA_HOME"] = str(tmp_path / "data-home")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "flatbak", "--dry-run"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0
+    assert "Would adopt user:org.mozilla.firefox" in result.stdout
 
 
 @pytest.mark.integration
