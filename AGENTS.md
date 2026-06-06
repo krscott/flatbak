@@ -1,4 +1,4 @@
-# Agent Guide for py-start
+# Agent Guide for flatbak
 
 ## Quick Reference
 

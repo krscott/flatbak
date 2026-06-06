@@ -28,7 +28,7 @@
           overlays = [ localOverlay ];
         };
 
-        pythonDev = pkgs.python3.pkgs.py-start.pythonModule.withPackages (
+        pythonDev = pkgs.python3.pkgs.flatbak.pythonModule.withPackages (
           ps:
           with ps;
           [
@@ -37,8 +37,8 @@
             mypy
             pytest
           ]
-          ++ pkgs.py-start.propagatedBuildInputs
-          ++ pkgs.py-start.nativeBuildInputs
+          ++ pkgs.flatbak.propagatedBuildInputs
+          ++ pkgs.flatbak.nativeBuildInputs
         );
 
         mkApp = text: {
@@ -58,13 +58,13 @@
       in
       {
         packages = {
-          inherit (pkgs) py-start;
-          default = pkgs.py-start;
+          inherit (pkgs) flatbak;
+          default = pkgs.flatbak;
         };
 
         devShells = {
           default = pkgs.mkShell {
-            inputsFrom = [ pkgs.py-start ];
+            inputsFrom = [ pkgs.flatbak ];
             nativeBuildInputs = [
               pythonDev
               pkgs.pyright

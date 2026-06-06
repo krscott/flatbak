@@ -4,7 +4,7 @@ default:
     just --list
 
 run *args:
-    python -m py_start "$@"
+    python -m flatbak "$@"
 
 test *args:
     python -m pytest "$@"
