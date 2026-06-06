@@ -122,9 +122,7 @@ def default_config_dir() -> Path:
 
 def load_config(config_dir: Path, *, create: bool) -> Config:
     if create:
-        config_dir.mkdir(parents=True, exist_ok=True)
-        root = config_dir / "root.yml"
-        root.touch(exist_ok=True)
+        ensure_root_config(config_dir)
 
     entries_by_key: dict[tuple[str, str, str, str, str, str], ConfigEntry] = {}
     if not config_dir.exists():
@@ -196,4 +194,5 @@ def format_yaml_config(entries: dict[Scope, list[str]]) -> str:
 def ensure_root_config(config_dir: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     root = config_dir / "root.yml"
-    root.touch(exist_ok=True)
+    if not root.exists() or root.read_text() == "":
+        root.write_text(format_yaml_config({"user": [], "system": []}))

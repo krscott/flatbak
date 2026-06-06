@@ -131,6 +131,13 @@ writing state.
 The application MUST support both the installed `flatbak` console script and
 `python -m flatbak` as equivalent CLI entry points.
 
+### CLI Edit
+
+The CLI MUST provide an `-e`/`--edit` option. Edit mode MUST ensure `root.yml`
+exists, then open it with the command from the `EDITOR` environment variable. If
+`EDITOR` is unset, edit mode MUST fall back to `xdg-open`. Edit mode MUST NOT
+perform reconciliation.
+
 ### Flatpak App Discovery
 
 The software manages Flatpak apps only. Runtime and extension installs SHOULD be

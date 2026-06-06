@@ -1,13 +1,16 @@
 import argparse
 import logging
 import os
+import shlex
+import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from dotenv import find_dotenv, load_dotenv
 from setproctitle import setproctitle
 
-from flatbak.config import default_config_dir
+from flatbak.config import default_config_dir, ensure_root_config
 from flatbak.lib import Options, Paths, ReconcileResult, reconcile
 from flatbak.state import default_data_dir
 
@@ -23,10 +26,19 @@ def main() -> None:
         format="%(message)s",
     )
 
+    paths = Paths(config_dir=default_config_dir(), data_dir=default_data_dir())
+
+    if cli_opts.edit:
+        try:
+            edit_root_config(paths.config_dir)
+        except ValueError as error:
+            raise SystemExit(f"flatbak: {error}") from error
+        return
+
     try:
         result = reconcile(
             cli_opts.app_opts,
-            Paths(config_dir=default_config_dir(), data_dir=default_data_dir()),
+            paths,
         )
     except ValueError as error:
         raise SystemExit(f"flatbak: {error}") from error
@@ -47,10 +59,24 @@ def print_result(result: ReconcileResult, *, dry_run: bool) -> None:
         print("No changes")
 
 
+def edit_root_config(config_dir: Path) -> None:
+    ensure_root_config(config_dir)
+    root = config_dir / "root.yml"
+    editor = os.environ.get("EDITOR")
+    command = [*shlex.split(editor), str(root)] if editor else ["xdg-open", str(root)]
+    try:
+        subprocess.run(command, check=True)
+    except FileNotFoundError as error:
+        raise ValueError(f"editor command was not found: {command[0]}") from error
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f"editor command failed: {' '.join(command)}") from error
+
+
 @dataclass(kw_only=True, frozen=True)
 class CliOpts:
     app_opts: Options
     verbose: bool
+    edit: bool
 
     @staticmethod
     def parse_args() -> "CliOpts":
@@ -60,6 +86,12 @@ class CliOpts:
             "--dry-run",
             action="store_true",
             help="report changes without installing, uninstalling, or writing files",
+        )
+        parser.add_argument(
+            "-e",
+            "--edit",
+            action="store_true",
+            help="open root.yml in EDITOR, or xdg-open if EDITOR is unset",
         )
 
         # CLI-specific options
@@ -77,6 +109,7 @@ class CliOpts:
         return CliOpts(
             app_opts=Options(dry_run=bool(args.dry_run)),
             verbose=bool(args.verbose),
+            edit=bool(args.edit),
         )
 
 

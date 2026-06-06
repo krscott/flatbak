@@ -41,6 +41,22 @@ def fake_flatpak(tmp_path: Path) -> Path:
     return bin_dir
 
 
+def fake_command(tmp_path: Path, name: str) -> Path:
+    bin_dir = tmp_path / f"{name}-bin"
+    bin_dir.mkdir()
+    log = tmp_path / f"{name}.log"
+    executable = bin_dir / name
+    executable.write_text(
+        "#!/usr/bin/env python3\n"
+        "from pathlib import Path\n"
+        "import sys\n"
+        f"log = Path({str(log)!r})\n"
+        "log.write_text(' '.join(sys.argv[1:]) + '\\n')\n"
+    )
+    executable.chmod(0o755)
+    return bin_dir
+
+
 @pytest.mark.integration
 def test_cli_adopts_installed_app(tmp_path: Path) -> None:
     bin_dir = fake_flatpak(tmp_path)
@@ -93,6 +109,43 @@ def test_module_dry_run_invokes_cli(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert "Would adopt user:org.mozilla.firefox" in result.stdout
+
+
+@pytest.mark.integration
+def test_cli_edit_opens_root_config_with_editor(tmp_path: Path) -> None:
+    bin_dir = fake_command(tmp_path, "editor")
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["EDITOR"] = "editor"
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "config-home")
+    env["XDG_DATA_HOME"] = str(tmp_path / "data-home")
+
+    result = subprocess.run(
+        ["flatbak", "--edit"], capture_output=True, text=True, env=env
+    )
+
+    root = tmp_path / "config-home" / "flatbak" / "root.yml"
+    assert result.returncode == 0
+    assert root.read_text() == "user: []\nsystem: []\n"
+    assert (tmp_path / "editor.log").read_text() == f"{root}\n"
+    assert not (tmp_path / "data-home").exists()
+
+
+@pytest.mark.integration
+def test_cli_edit_falls_back_to_xdg_open(tmp_path: Path) -> None:
+    bin_dir = fake_command(tmp_path, "xdg-open")
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env.pop("EDITOR", None)
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "config-home")
+    env["XDG_DATA_HOME"] = str(tmp_path / "data-home")
+
+    result = subprocess.run(["flatbak", "-e"], capture_output=True, text=True, env=env)
+
+    root = tmp_path / "config-home" / "flatbak" / "root.yml"
+    assert result.returncode == 0
+    assert (tmp_path / "xdg-open.log").read_text() == f"{root}\n"
+    assert not (tmp_path / "data-home").exists()
 
 
 @pytest.mark.integration

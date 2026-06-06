@@ -81,6 +81,14 @@ error instead of adding the remote automatically.
 
 ## Options
 
+Open the machine-local config in your editor:
+
+```sh
+flatbak --edit
+```
+
+`flatbak --edit` uses `EDITOR` when set and falls back to `xdg-open`.
+
 Enable verbose logging:
 
 ```sh
