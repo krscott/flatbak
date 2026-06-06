@@ -1,3 +1,3 @@
-from flatbak.lib import greet
+from flatbak.lib import Options, Paths, ReconcileResult, reconcile
 
-__all__ = ["greet"]
+__all__ = ["Options", "Paths", "ReconcileResult", "reconcile"]

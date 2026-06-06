@@ -1,108 +1,82 @@
-"""Black-box integration tests for the CLI using subprocess.
-
-These tests invoke the CLI as a real process to verify the end-to-end user experience.
-"""
+from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
 
-@pytest.mark.integration
-def test_cli_basic_argument() -> None:
-    """Test CLI with a basic name argument."""
-    result = subprocess.run(
-        ["flatbak", "Alice"],
-        capture_output=True,
-        text=True,
+def fake_flatpak(tmp_path: Path) -> Path:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "flatpak.log"
+    executable = bin_dir / "flatpak"
+    executable.write_text(
+        "#!/usr/bin/env python3\n"
+        "from pathlib import Path\n"
+        "import sys\n"
+        f"log = Path({str(log)!r})\n"
+        "args = sys.argv[1:]\n"
+        "if args[:4] == ['list', '--user', '--app', '--columns=application,origin,ref']:\n"
+        "    print('org.mozilla.firefox\\tflathub\\tapp/org.mozilla.firefox/x86_64/stable')\n"
+        "elif args[:3] == ['remotes', '--user', '--columns=name']:\n"
+        "    print('flathub')\n"
+        "elif args and args[0] in {'install', 'uninstall'}:\n"
+        "    log.write_text(log.read_text() + ' '.join(args) + '\\n' if log.exists() else ' '.join(args) + '\\n')\n"
+        "else:\n"
+        "    print('unexpected flatpak args: ' + ' '.join(args), file=sys.stderr)\n"
+        "    raise SystemExit(2)\n"
     )
-    assert result.returncode == 0
-    assert "Hello, Alice!" in result.stdout
+    executable.chmod(0o755)
+    return bin_dir
 
 
 @pytest.mark.integration
-def test_cli_default_name() -> None:
-    """Test CLI with no arguments uses default name."""
-    result = subprocess.run(
-        ["flatbak"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-    assert "Hello, World!" in result.stdout
-
-
-@pytest.mark.integration
-def test_cli_verbose_flag() -> None:
-    """Test CLI with --verbose flag shows debug output."""
-    result = subprocess.run(
-        ["flatbak", "--verbose", "Bob"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-    assert "Hello, Bob!" in result.stdout
-    assert "Greeting user..." in result.stderr
-
-
-@pytest.mark.integration
-def test_cli_verbose_short_flag() -> None:
-    """Test CLI with -v short flag shows debug output."""
-    result = subprocess.run(
-        ["flatbak", "-v", "Charlie"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-    assert "Hello, Charlie!" in result.stdout
-    assert "Greeting user..." in result.stderr
-
-
-@pytest.mark.integration
-def test_cli_verbose_env_var() -> None:
-    """Test CLI with FLATBAK_VERBOSE environment variable."""
+def test_cli_adopts_installed_app(tmp_path: Path) -> None:
+    bin_dir = fake_flatpak(tmp_path)
     env = os.environ.copy()
-    env["FLATBAK_VERBOSE"] = "1"
-    result = subprocess.run(
-        ["flatbak", "David"],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "config-home")
+    env["XDG_DATA_HOME"] = str(tmp_path / "data-home")
+
+    result = subprocess.run(["flatbak"], capture_output=True, text=True, env=env)
+
     assert result.returncode == 0
-    assert "Hello, David!" in result.stdout
-    assert "Greeting user..." in result.stderr
+    assert "adopt org.mozilla.firefox" in result.stdout
+    assert (tmp_path / "config-home" / "flatbak" / "root.txt").read_text() == (
+        "org.mozilla.firefox\n"
+    )
 
 
 @pytest.mark.integration
-def test_cli_verbose_env_var_false() -> None:
-    """Test that FLATBAK_VERBOSE=0 does not enable debug output."""
+def test_cli_dry_run_does_not_write(tmp_path: Path) -> None:
+    bin_dir = fake_flatpak(tmp_path)
     env = os.environ.copy()
-    env["FLATBAK_VERBOSE"] = "0"
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "config-home")
+    env["XDG_DATA_HOME"] = str(tmp_path / "data-home")
+
     result = subprocess.run(
-        ["flatbak", "David"],
-        capture_output=True,
-        text=True,
-        env=env,
+        ["flatbak", "--dry-run"], capture_output=True, text=True, env=env
     )
+
     assert result.returncode == 0
-    assert "Hello, David!" in result.stdout
-    assert "Greeting user..." not in result.stderr
+    assert "Would adopt org.mozilla.firefox" in result.stdout
+    assert not (tmp_path / "config-home").exists()
+    assert not (tmp_path / "data-home").exists()
 
 
 @pytest.mark.integration
-def test_cli_flag_overrides_env_var() -> None:
-    """Test that command line flag works even when env var is not set."""
+def test_cli_verbose_flag(tmp_path: Path) -> None:
+    bin_dir = fake_flatpak(tmp_path)
     env = os.environ.copy()
-    # Ensure the env var is not set
-    env.pop("FLATBAK_VERBOSE", None)
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "config-home")
+    env["XDG_DATA_HOME"] = str(tmp_path / "data-home")
+
     result = subprocess.run(
-        ["flatbak", "--verbose", "Eve"],
-        capture_output=True,
-        text=True,
-        env=env,
+        ["flatbak", "--verbose"], capture_output=True, text=True, env=env
     )
+
     assert result.returncode == 0
-    assert "Hello, Eve!" in result.stdout
-    assert "Greeting user..." in result.stderr

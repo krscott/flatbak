@@ -7,7 +7,9 @@ from typing import Any
 from dotenv import find_dotenv, load_dotenv
 from setproctitle import setproctitle
 
-from flatbak.lib import Options, greet
+from flatbak.config import default_config_dir
+from flatbak.lib import Options, Paths, ReconcileResult, reconcile
+from flatbak.state import default_data_dir
 
 
 def main() -> None:
@@ -21,7 +23,28 @@ def main() -> None:
         format="%(message)s",
     )
 
-    greet(cli_opts.app_opts)
+    try:
+        result = reconcile(
+            cli_opts.app_opts,
+            Paths(config_dir=default_config_dir(), data_dir=default_data_dir()),
+        )
+    except ValueError as error:
+        raise SystemExit(f"flatbak: {error}") from error
+    print_result(result, dry_run=cli_opts.app_opts.dry_run)
+
+
+def print_result(result: ReconcileResult, *, dry_run: bool) -> None:
+    prefix = "Would " if dry_run else ""
+    for app in result.removed:
+        print(f"{prefix}remove {app}")
+    for app in result.adopted:
+        print(f"{prefix}adopt {app}")
+    for app in result.installed:
+        print(f"{prefix}install {app}")
+    for app in result.tracked:
+        print(f"{prefix}track {app}")
+    if not result.changed:
+        print("No changes")
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -33,8 +56,11 @@ class CliOpts:
     def parse_args() -> "CliOpts":
         parser = argparse.ArgumentParser()
 
-        # App options
-        parser.add_argument("name", nargs="?", default="World", help="Your name")
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="report changes without installing, uninstalling, or writing files",
+        )
 
         # CLI-specific options
         parser.add_argument(
@@ -49,9 +75,7 @@ class CliOpts:
         args = parser.parse_args()
 
         return CliOpts(
-            app_opts=Options(
-                name=args.name,
-            ),
+            app_opts=Options(dry_run=bool(args.dry_run)),
             verbose=bool(args.verbose),
         )
 
