@@ -144,6 +144,8 @@ def _matching_entry_app(
     for app in apps:
         if entry.matches(app):
             return app
+    if entry.qualified:
+        return None
     for app in apps:
         if app.app_id == entry.app_id:
             return app
