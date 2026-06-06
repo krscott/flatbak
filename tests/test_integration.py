@@ -22,6 +22,8 @@ def fake_flatpak(tmp_path: Path) -> Path:
         "    print('org.mozilla.firefox\\tflathub\\tapp/org.mozilla.firefox/x86_64/stable')\n"
         "elif args[:3] == ['remotes', '--user', '--columns=name']:\n"
         "    print('flathub')\n"
+        "elif args[:4] == ['remote-ls', '--user', '--app', '--columns=application,ref']:\n"
+        "    print('org.mozilla.firefox\\tapp/org.mozilla.firefox/x86_64/stable')\n"
         "elif args and args[0] in {'install', 'uninstall'}:\n"
         "    log.write_text(log.read_text() + ' '.join(args) + '\\n' if log.exists() else ' '.join(args) + '\\n')\n"
         "else:\n"

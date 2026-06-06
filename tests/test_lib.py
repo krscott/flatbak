@@ -26,9 +26,31 @@ class FakeFlatpak(Flatpak):
     def remotes(self) -> set[str]:
         return self.available_remotes
 
+    def resolve(self, entry: object) -> InstalledApp:
+        assert isinstance(entry, ConfigEntry)
+        if entry.effective_remote not in self.available_remotes:
+            raise ValueError(f"No such ref: {entry.value}")
+        if entry.qualified:
+            return InstalledApp(
+                app_id=entry.app_id,
+                remote=entry.effective_remote,
+                kind=entry.kind,
+                arch=entry.arch,
+                branch=entry.branch,
+            )
+        return InstalledApp(
+            app_id=entry.app_id,
+            remote=entry.effective_remote,
+            arch="x86_64",
+            branch="stable",
+        )
+
     def install(self, entry: object) -> None:
         assert isinstance(entry, ConfigEntry)
         self.installs.append(f"{entry.remote or 'flathub'} {entry.ref}")
+        installed = self.resolve(entry)
+        if not any(entry.matches(app) for app in self.apps):
+            self.apps.append(installed)
 
     def uninstall(self, ref: str) -> None:
         self.uninstalls.append(ref)
@@ -287,7 +309,7 @@ def test_reconcile_does_not_remove_before_unresolvable_install(
     )
 
     class InstallFailsFlatpak(FakeFlatpak):
-        def install(self, entry: object) -> None:
+        def resolve(self, entry: object) -> InstalledApp:
             raise ValueError("No such ref")
 
     flatpak = InstallFailsFlatpak(
@@ -312,6 +334,48 @@ def test_reconcile_does_not_remove_before_unresolvable_install(
             installed_ref="app/org.mozilla.firefox/x86_64/beta",
         )
     ]
+
+
+def test_reconcile_does_not_write_config_before_unresolvable_install(
+    tmp_path: Path,
+) -> None:
+    paths = Paths(config_dir=tmp_path / "config", data_dir=tmp_path / "data")
+    paths.config_dir.mkdir()
+    (paths.config_dir / "wanted.txt").write_text("org.mozilla.firefox\n")
+
+    class ResolveFailsFlatpak(FakeFlatpak):
+        def resolve(self, entry: object) -> InstalledApp:
+            raise ValueError("No such ref")
+
+    flatpak = ResolveFailsFlatpak([])
+
+    with pytest.raises(ValueError, match="No such ref"):
+        reconcile(Options(), paths, flatpak)
+
+    assert not (paths.config_dir / "root.txt").exists()
+    assert not paths.data_dir.exists()
+    assert flatpak.installs == []
+    assert flatpak.uninstalls == []
+
+
+def test_reconcile_fails_if_installed_app_is_not_reported_after_install(
+    tmp_path: Path,
+) -> None:
+    paths = Paths(config_dir=tmp_path / "config", data_dir=tmp_path / "data")
+    paths.config_dir.mkdir()
+    (paths.config_dir / "root.txt").write_text("org.mozilla.firefox\n")
+
+    class InstallNotReportedFlatpak(FakeFlatpak):
+        def install(self, entry: object) -> None:
+            assert isinstance(entry, ConfigEntry)
+            self.installs.append(f"{entry.remote or 'flathub'} {entry.ref}")
+
+    flatpak = InstallNotReportedFlatpak([])
+
+    with pytest.raises(ValueError, match="not reported"):
+        reconcile(Options(), paths, flatpak)
+
+    assert not paths.data_dir.exists()
 
 
 def test_reconcile_removes_mismatched_remote_before_installing_configured_ref(

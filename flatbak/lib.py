@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from flatbak.config import ConfigEntry, append_root_entries, load_config
+from flatbak.config import (
+    ConfigEntry,
+    append_root_entries,
+    ensure_root_config,
+    load_config,
+)
 from flatbak.flatpak import Flatpak, InstalledApp
 from flatbak.state import State, TrackedApp, load_state, save_state
 
@@ -35,7 +40,7 @@ def reconcile(
     opts: Options, paths: Paths, flatpak: Flatpak | None = None
 ) -> ReconcileResult:
     client = flatpak if flatpak is not None else Flatpak()
-    config = load_config(paths.config_dir, create=not opts.dry_run)
+    config = load_config(paths.config_dir, create=False)
     state = load_state(paths.data_dir / "state.json")
     installed = client.list_installed_apps()
 
@@ -81,10 +86,14 @@ def reconcile(
         installs.append(entry.value)
         if not opts.dry_run:
             client.install(entry)
-            tracked_apps[entry.app_id] = TrackedApp(
-                app_id=entry.app_id,
-                installed_ref=entry.ref,
-                source=entry.value,
+            installed_after_removals = client.list_installed_apps()
+            post_install_app = _matching_entry_app(entry, installed_after_removals)
+            if post_install_app is None:
+                raise ValueError(
+                    f"Installed app '{entry.value}' was not reported by Flatpak"
+                )
+            tracked_apps[entry.app_id] = _tracked_from_installed_entry(
+                post_install_app, entry
             )
 
     newly_tracked: list[str] = []
@@ -96,6 +105,7 @@ def reconcile(
         tracked_apps[app.app_id] = _tracked_from_installed(app, source=matching.value)
 
     if not opts.dry_run:
+        ensure_root_config(paths.config_dir)
         if adopted_entries:
             append_root_entries(paths.config_dir, adopted_entries)
         save_state(
@@ -128,15 +138,29 @@ def _entry_matches_any(entry: ConfigEntry, apps: list[InstalledApp]) -> bool:
     return any(entry.matches(app) for app in apps)
 
 
+def _matching_entry_app(
+    entry: ConfigEntry, apps: list[InstalledApp]
+) -> InstalledApp | None:
+    for app in apps:
+        if entry.matches(app):
+            return app
+    for app in apps:
+        if app.app_id == entry.app_id:
+            return app
+    return None
+
+
 def _tracked_installed_apps(
     tracked: TrackedApp, apps: list[InstalledApp]
 ) -> list[InstalledApp]:
     if tracked.installed_ref:
-        return [
+        matches = [
             app
             for app in apps
             if app.app_id == tracked.app_id and app.ref == tracked.installed_ref
         ]
+        if matches:
+            return matches
     return [app for app in apps if app.app_id == tracked.app_id]
 
 
@@ -150,3 +174,7 @@ def _adoption_value(app: InstalledApp) -> str:
 
 def _tracked_from_installed(app: InstalledApp, source: str) -> TrackedApp:
     return TrackedApp(app_id=app.app_id, installed_ref=app.ref, source=source)
+
+
+def _tracked_from_installed_entry(app: InstalledApp, entry: ConfigEntry) -> TrackedApp:
+    return TrackedApp(app_id=app.app_id, installed_ref=app.ref, source=entry.value)

@@ -134,8 +134,14 @@ def parse_config_line(line: str) -> str | None:
 
 
 def append_root_entries(config_dir: Path, entries: list[str]) -> None:
-    config_dir.mkdir(parents=True, exist_ok=True)
+    ensure_root_config(config_dir)
     root = config_dir / "root.txt"
-    existing = root.read_text() if root.exists() else ""
+    existing = root.read_text()
     prefix = "" if existing == "" or existing.endswith("\n") else "\n"
     root.write_text(existing + prefix + "\n".join(entries) + "\n")
+
+
+def ensure_root_config(config_dir: Path) -> None:
+    config_dir.mkdir(parents=True, exist_ok=True)
+    root = config_dir / "root.txt"
+    root.touch(exist_ok=True)
