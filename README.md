@@ -3,9 +3,8 @@
 Synchronize your Flatpak apps from YAML config files.
 
 `flatbak` keeps user and system Flatpak app installs aligned with a config
-directory. It is designed for people who want reproducible Flatpak installs
-without needing to care whether a software center installed an app for the user
-or system.
+directory. This enables reproducible Flatpak installs configurable through
+either text or the Software Center.
 
 ## Quick Start
 
