@@ -20,9 +20,15 @@ def fake_flatpak(tmp_path: Path) -> Path:
         "args = sys.argv[1:]\n"
         "if args[:4] == ['list', '--user', '--app', '--columns=application,origin,ref']:\n"
         "    print('org.mozilla.firefox\\tflathub\\tapp/org.mozilla.firefox/x86_64/stable')\n"
+        "elif args[:4] == ['list', '--system', '--app', '--columns=application,origin,ref']:\n"
+        "    pass\n"
         "elif args[:3] == ['remotes', '--user', '--columns=name']:\n"
         "    print('flathub')\n"
+        "elif args[:3] == ['remotes', '--system', '--columns=name']:\n"
+        "    print('flathub')\n"
         "elif args[:4] == ['remote-ls', '--user', '--app', '--columns=application,ref']:\n"
+        "    print('org.mozilla.firefox\\tapp/org.mozilla.firefox/x86_64/stable')\n"
+        "elif args[:4] == ['remote-ls', '--system', '--app', '--columns=application,ref']:\n"
         "    print('org.mozilla.firefox\\tapp/org.mozilla.firefox/x86_64/stable')\n"
         "elif args and args[0] in {'install', 'uninstall'}:\n"
         "    log.write_text(log.read_text() + ' '.join(args) + '\\n' if log.exists() else ' '.join(args) + '\\n')\n"
@@ -45,9 +51,9 @@ def test_cli_adopts_installed_app(tmp_path: Path) -> None:
     result = subprocess.run(["flatbak"], capture_output=True, text=True, env=env)
 
     assert result.returncode == 0
-    assert "adopt org.mozilla.firefox" in result.stdout
-    assert (tmp_path / "config-home" / "flatbak" / "root.txt").read_text() == (
-        "org.mozilla.firefox\n"
+    assert "adopt user:org.mozilla.firefox" in result.stdout
+    assert (tmp_path / "config-home" / "flatbak" / "root.yml").read_text() == (
+        "user:\n  - org.mozilla.firefox\nsystem:\n"
     )
 
 
@@ -64,7 +70,7 @@ def test_cli_dry_run_does_not_write(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0
-    assert "Would adopt org.mozilla.firefox" in result.stdout
+    assert "Would adopt user:org.mozilla.firefox" in result.stdout
     assert not (tmp_path / "config-home").exists()
     assert not (tmp_path / "data-home").exists()
 

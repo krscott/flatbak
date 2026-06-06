@@ -47,43 +47,50 @@ def reconcile(
     client.validate_entries(config.entries)
 
     desired_entries = list(config.entries)
-    tracked_app_ids = {app.app_id for app in state.tracked_apps}
+    tracked_app_keys = {(app.scope, app.app_id) for app in state.tracked_apps}
 
-    adopted_entries: list[str] = []
-    tracked_apps = {app.app_id: app for app in state.tracked_apps}
+    adopted_entries: list[ConfigEntry] = []
+    tracked_apps = {(app.scope, app.app_id): app for app in state.tracked_apps}
 
     for app in installed:
-        if app.app_id in tracked_app_ids or _installed_matches_any(
+        if (app.scope, app.app_id) in tracked_app_keys or _installed_matches_any(
             app, desired_entries
         ):
             continue
         value = _adoption_value(app)
-        entry = ConfigEntry.parse(value, source=paths.config_dir / "root.txt")
-        adopted_entries.append(value)
+        entry = ConfigEntry.parse(
+            value, scope=app.scope, source=paths.config_dir / "root.yml"
+        )
+        adopted_entries.append(entry)
         desired_entries.append(entry)
-        tracked_apps[app.app_id] = _tracked_from_installed(app, source=value)
+        tracked_apps[(app.scope, app.app_id)] = _tracked_from_installed(
+            app, source=value
+        )
 
     removed: list[str] = []
     installed_after_removals = list(installed)
     for tracked in list(tracked_apps.values()):
         tracked_installs = _tracked_installed_apps(tracked, installed_after_removals)
         if not tracked_installs:
-            tracked_apps.pop(tracked.app_id, None)
+            tracked_apps.pop((tracked.scope, tracked.app_id), None)
             continue
         for installed_app in tracked_installs:
             if _installed_matches_any(installed_app, desired_entries):
                 continue
-            removed.append(installed_app.ref)
+            removed.append(_display(installed_app.scope, installed_app.ref))
             if not opts.dry_run:
-                client.uninstall(installed_app.ref)
+                client.uninstall(installed_app.scope, installed_app.ref)
             installed_after_removals.remove(installed_app)
-        if not any(app.app_id == tracked.app_id for app in installed_after_removals):
-            tracked_apps.pop(tracked.app_id, None)
+        if not any(
+            app.scope == tracked.scope and app.app_id == tracked.app_id
+            for app in installed_after_removals
+        ):
+            tracked_apps.pop((tracked.scope, tracked.app_id), None)
     installs: list[str] = []
     for entry in desired_entries:
         if _entry_matches_any(entry, installed_after_removals):
             continue
-        installs.append(entry.value)
+        installs.append(_display(entry.scope, entry.value))
         if not opts.dry_run:
             client.install(entry)
             installed_after_removals = client.list_installed_apps()
@@ -92,17 +99,19 @@ def reconcile(
                 raise ValueError(
                     f"Installed app '{entry.value}' was not reported by Flatpak"
                 )
-            tracked_apps[entry.app_id] = _tracked_from_installed_entry(
+            tracked_apps[(entry.scope, entry.app_id)] = _tracked_from_installed_entry(
                 post_install_app, entry
             )
 
     newly_tracked: list[str] = []
     for app in installed_after_removals:
         matching = _matching_entry(app, desired_entries)
-        if matching is None or app.app_id in tracked_apps:
+        if matching is None or (app.scope, app.app_id) in tracked_apps:
             continue
-        newly_tracked.append(app.app_id)
-        tracked_apps[app.app_id] = _tracked_from_installed(app, source=matching.value)
+        newly_tracked.append(_display(app.scope, app.app_id))
+        tracked_apps[(app.scope, app.app_id)] = _tracked_from_installed(
+            app, source=matching.value
+        )
 
     if not opts.dry_run:
         ensure_root_config(paths.config_dir)
@@ -110,11 +119,15 @@ def reconcile(
             append_root_entries(paths.config_dir, adopted_entries)
         save_state(
             paths.data_dir / "state.json",
-            State(tracked=sorted(tracked_apps.values(), key=lambda app: app.app_id)),
+            State(
+                tracked=sorted(
+                    tracked_apps.values(), key=lambda app: (app.scope, app.app_id)
+                )
+            ),
         )
 
     return ReconcileResult(
-        adopted=adopted_entries,
+        adopted=[_display(entry.scope, entry.value) for entry in adopted_entries],
         installed=installs,
         removed=removed,
         tracked=newly_tracked,
@@ -148,6 +161,8 @@ def _matching_entry_app(
         return None
     for app in apps:
         if app.app_id == entry.app_id:
+            if app.scope != entry.scope:
+                continue
             return app
     return None
 
@@ -159,11 +174,17 @@ def _tracked_installed_apps(
         matches = [
             app
             for app in apps
-            if app.app_id == tracked.app_id and app.ref == tracked.installed_ref
+            if app.scope == tracked.scope
+            and app.app_id == tracked.app_id
+            and app.ref == tracked.installed_ref
         ]
         if matches:
             return matches
-    return [app for app in apps if app.app_id == tracked.app_id]
+    return [
+        app
+        for app in apps
+        if app.scope == tracked.scope and app.app_id == tracked.app_id
+    ]
 
 
 def _adoption_value(app: InstalledApp) -> str:
@@ -175,8 +196,19 @@ def _adoption_value(app: InstalledApp) -> str:
 
 
 def _tracked_from_installed(app: InstalledApp, source: str) -> TrackedApp:
-    return TrackedApp(app_id=app.app_id, installed_ref=app.ref, source=source)
+    return TrackedApp(
+        scope=app.scope, app_id=app.app_id, installed_ref=app.ref, source=source
+    )
 
 
 def _tracked_from_installed_entry(app: InstalledApp, entry: ConfigEntry) -> TrackedApp:
-    return TrackedApp(app_id=app.app_id, installed_ref=app.ref, source=entry.value)
+    return TrackedApp(
+        scope=entry.scope,
+        app_id=app.app_id,
+        installed_ref=app.ref,
+        source=entry.value,
+    )
+
+
+def _display(scope: str, value: str) -> str:
+    return f"{scope}:{value}"

@@ -2,6 +2,7 @@
   buildPythonPackage,
   lib,
   pytestCheckHook,
+  pyyaml,
   python-dotenv,
   setproctitle,
   setuptools,
@@ -14,6 +15,7 @@ buildPythonPackage {
   nativeBuildInputs = [ setuptools ];
 
   propagatedBuildInputs = [
+    pyyaml
     python-dotenv
     setproctitle
   ];

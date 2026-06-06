@@ -1,10 +1,11 @@
 # flatbak
 
-Synchronize your Flatpak apps from simple text files.
+Synchronize your Flatpak apps from YAML config files.
 
-`flatbak` keeps your user-installed Flatpak apps aligned with a config directory.
-It is designed for people who want Flatpak installs to be reproducible while
-still being able to install apps normally from a software center.
+`flatbak` keeps user and system Flatpak app installs aligned with a config
+directory. It is designed for people who want reproducible Flatpak installs
+without needing to care whether a software center installed an app for the user
+or system.
 
 ## Quick Start
 
@@ -20,68 +21,63 @@ Apply changes:
 flatbak
 ```
 
-On the first run, flatbak creates a config file and adopts your already installed
-user Flatpak apps into it.
+On the first run, flatbak creates `root.yml` and adopts your already installed
+Flatpak apps into the scope where they are installed.
 
 ## Config
 
 flatbak reads config from:
 
 ```txt
-~/.config/flatbak/*.txt
+~/.config/flatbak/*.yml
+~/.config/flatbak/*.yaml
 ```
 
-If `XDG_CONFIG_HOME` is set, it uses `$XDG_CONFIG_HOME/flatbak/*.txt` instead.
+If `XDG_CONFIG_HOME` is set, it uses `$XDG_CONFIG_HOME/flatbak` instead.
 
-Config files are plain text. Put one app on each line:
+Config files are YAML mappings with `user` and `system` sections:
 
-```txt
-org.mozilla.firefox
-org.gnome.Calculator
+```yaml
+user:
+  - org.mozilla.firefox
+  - org.gnome.Calculator
+
+system:
+  - org.audacityteam.Audacity
 ```
 
 Bare app IDs install from `flathub` by default.
 
 If you need a specific remote, architecture, or branch, use a qualified ref:
 
-```txt
-flathub:app/org.gnome.Calculator/x86_64/stable
+```yaml
+user:
+  - flathub:app/org.gnome.Calculator/x86_64/stable
 ```
 
-Parsing rules:
-
-- Only `.txt` files are loaded.
-- Empty lines are ignored.
-- Lines starting with `#` are ignored.
-- Inline comments start with ` #`.
-- A `#` without leading whitespace is parsed as part of the value.
-- Duplicate entries are treated as one desired app.
-
-`root.txt` is machine-local and is the only config file flatbak writes. You can
-move entries from `root.txt` into other `.txt` files, including symlinked files
-shared across machines.
+`root.yml` is machine-local and is the only config file flatbak writes. You can
+move entries from `root.yml` into other `.yml` or `.yaml` files, including
+symlinked files shared across machines.
 
 ## What It Does
 
 On each run, flatbak:
 
-- Adds installed but unmanaged apps to `root.txt`.
-- Installs configured apps that are missing.
-- Removes tracked apps that are no longer configured.
+- Adds installed but unmanaged user apps under `user:` in `root.yml`.
+- Adds installed but unmanaged system apps under `system:` in `root.yml`.
+- Installs configured apps into their configured scope.
+- Removes tracked apps that are no longer configured in their tracked scope.
 - Tracks installed apps that are already present in config.
 - Leaves runtimes and extensions to Flatpak.
-
-flatbak manages user Flatpak installs by default. It does not manage system
-Flatpak installs.
 
 ## Safety
 
 flatbak only removes apps that it has tracked. An app installed outside flatbak is
-first adopted into `root.txt` and tracked, rather than removed.
+first adopted into `root.yml` and tracked, rather than removed.
 
 Before changing installs, flatbak validates configured remotes and app refs where
-possible. If `flathub` is required but missing, flatbak fails with an error
-instead of adding the remote automatically.
+possible. If `flathub` is required but missing for a scope, flatbak fails with an
+error instead of adding the remote automatically.
 
 ## Options
 
@@ -94,10 +90,6 @@ flatbak --verbose
 `FLATBAK_VERBOSE=1` also enables verbose logging.
 
 ## Development
-
-flatbak treats configured apps as desired state. On each run it compares config,
-current user-installed Flatpak apps, and its own tracked state, then reconciles
-the differences.
 
 State is stored in:
 

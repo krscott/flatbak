@@ -4,8 +4,11 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
-from flatbak.flatpak import InstalledApp
+import yaml
+
+from flatbak.flatpak import SCOPES, InstalledApp, Scope
 
 APP_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9][A-Za-z0-9_-]*)+$")
 
@@ -17,6 +20,7 @@ class Config:
 
 @dataclass(kw_only=True, frozen=True)
 class ConfigEntry:
+    scope: Scope
     value: str
     app_id: str
     remote: str
@@ -42,13 +46,20 @@ class ConfigEntry:
         return self.remote if self.remote else "flathub"
 
     @property
-    def match_key(self) -> tuple[str, str, str, str, str]:
+    def match_key(self) -> tuple[str, str, str, str, str, str]:
         if not self.qualified:
-            return ("app-id", self.app_id, "", "", "")
-        return (self.effective_remote, self.kind, self.app_id, self.arch, self.branch)
+            return (self.scope, "app-id", self.app_id, "", "", "")
+        return (
+            self.scope,
+            self.effective_remote,
+            self.kind,
+            self.app_id,
+            self.arch,
+            self.branch,
+        )
 
     @staticmethod
-    def parse(value: str, source: Path | None = None) -> ConfigEntry:
+    def parse(value: str, scope: Scope, source: Path | None = None) -> ConfigEntry:
         remote = ""
         ref = value
         if ":" in value:
@@ -60,6 +71,7 @@ class ConfigEntry:
             if not APP_ID_RE.match(app_id):
                 raise ValueError(f"Invalid Flatpak app ID: {value}")
             return ConfigEntry(
+                scope=scope,
                 value=value,
                 app_id=app_id,
                 remote=remote,
@@ -77,6 +89,7 @@ class ConfigEntry:
         if not APP_ID_RE.match(app_id) or not arch or not branch:
             raise ValueError(f"Invalid Flatpak ref: {value}")
         return ConfigEntry(
+            scope=scope,
             value=value,
             app_id=app_id,
             remote=remote,
@@ -87,6 +100,8 @@ class ConfigEntry:
         )
 
     def matches(self, app: InstalledApp) -> bool:
+        if self.scope != app.scope:
+            return False
         if not self.qualified:
             return self.app_id == app.app_id
         return (
@@ -108,40 +123,72 @@ def default_config_dir() -> Path:
 def load_config(config_dir: Path, *, create: bool) -> Config:
     if create:
         config_dir.mkdir(parents=True, exist_ok=True)
-        root = config_dir / "root.txt"
+        root = config_dir / "root.yml"
         root.touch(exist_ok=True)
 
-    entries_by_value: dict[str, ConfigEntry] = {}
+    entries_by_key: dict[tuple[str, str, str, str, str, str], ConfigEntry] = {}
     if not config_dir.exists():
         return Config(entries=[])
-    for path in sorted(config_dir.glob("*.txt")):
-        for line in path.read_text().splitlines():
-            value = parse_config_line(line)
-            if value is None:
-                continue
-            entries_by_value.setdefault(value, ConfigEntry.parse(value, source=path))
-    return Config(entries=list(entries_by_value.values()))
+    paths = sorted([*config_dir.glob("*.yml"), *config_dir.glob("*.yaml")])
+    for path in paths:
+        for scope, value in parse_yaml_config(path).items():
+            for item in value:
+                entry = ConfigEntry.parse(item, scope=scope, source=path)
+                entries_by_key.setdefault(entry.match_key, entry)
+    return Config(entries=list(entries_by_key.values()))
 
 
-def parse_config_line(line: str) -> str | None:
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return None
-    comment_start = stripped.find(" #")
-    if comment_start != -1:
-        stripped = stripped[:comment_start].rstrip()
-    return stripped or None
+def parse_yaml_config(path: Path) -> dict[Scope, list[str]]:
+    result: dict[Scope, list[str]] = {"user": [], "system": []}
+
+    data: object = yaml.safe_load(path.read_text())
+    if data is None:
+        return result
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Invalid config {path}: top-level YAML value must be a mapping"
+        )
+
+    mapping = cast(dict[object, object], data)
+    for key, value in mapping.items():
+        if key == "user":
+            scope: Scope = "user"
+        elif key == "system":
+            scope = "system"
+        else:
+            raise ValueError(f"Invalid config {path}: unknown top-level key '{key}'")
+        if not isinstance(value, list):
+            raise ValueError(f"Invalid config {path}: expected list value for {scope}")
+        items = cast(list[object], value)
+        for item in items:
+            if not isinstance(item, str):
+                raise ValueError(
+                    f"Invalid config {path}: entries under {scope} must be strings"
+                )
+            result[scope].append(item)
+    return result
 
 
-def append_root_entries(config_dir: Path, entries: list[str]) -> None:
+def append_root_entries(config_dir: Path, entries: list[ConfigEntry]) -> None:
     ensure_root_config(config_dir)
-    root = config_dir / "root.txt"
-    existing = root.read_text()
-    prefix = "" if existing == "" or existing.endswith("\n") else "\n"
-    root.write_text(existing + prefix + "\n".join(entries) + "\n")
+    root = config_dir / "root.yml"
+    existing = parse_yaml_config(root)
+    for entry in entries:
+        existing[entry.scope].append(entry.value)
+    root.write_text(format_yaml_config(existing))
+
+
+def format_yaml_config(entries: dict[Scope, list[str]]) -> str:
+    lines: list[str] = []
+    for scope in SCOPES:
+        values = entries[scope]
+        lines.append(f"{scope}:")
+        for value in values:
+            lines.append(f"  - {value}")
+    return "\n".join(lines) + "\n"
 
 
 def ensure_root_config(config_dir: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
-    root = config_dir / "root.txt"
+    root = config_dir / "root.yml"
     root.touch(exist_ok=True)

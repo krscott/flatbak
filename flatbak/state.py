@@ -6,12 +6,15 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from flatbak.flatpak import Scope
+
 SCHEMA_VERSION = 1
 
 
 @dataclass(kw_only=True, frozen=True)
 class TrackedApp:
     app_id: str
+    scope: Scope = "user"
     installed_ref: str | None = None
     source: str | None = None
 
@@ -48,10 +51,18 @@ class State:
             app_id = tracked_item.get("app_id")
             if not isinstance(app_id, str):
                 raise ValueError("Invalid state: tracked app missing app_id")
+            scope = tracked_item.get("scope")
+            if scope == "user":
+                tracked_scope: Scope = "user"
+            elif scope == "system":
+                tracked_scope = "system"
+            else:
+                raise ValueError("Invalid state: tracked app missing scope")
             installed_ref = tracked_item.get("installed_ref")
             source = tracked_item.get("source")
             tracked.append(
                 TrackedApp(
+                    scope=tracked_scope,
                     app_id=app_id,
                     installed_ref=(
                         installed_ref if isinstance(installed_ref, str) else None

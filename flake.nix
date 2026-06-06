@@ -36,6 +36,7 @@
             isort
             mypy
             pytest
+            ps."types-pyyaml"
           ]
           ++ pkgs.flatbak.propagatedBuildInputs
           ++ pkgs.flatbak.nativeBuildInputs
