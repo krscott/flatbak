@@ -46,7 +46,8 @@ The config directory MUST be created if missing before writing config files.
 - Empty lines are ignored.
 - Lines starting with `#` are ignored.
 - Inline comments starting with ` #` are ignored after the desired app value.
-  A `#` character without leading whitespace is treated as part of the value.
+  A `#` character without leading whitespace is parsed as part of the value, but
+  the resulting value MAY still fail Flatpak app ID or ref validation.
 
 Config entries MAY be either bare Flatpak app IDs or qualified Flatpak refs.
 
@@ -108,6 +109,11 @@ missing remotes. If the `flathub` remote is missing and required for a bare app
 ID, the software MUST fail with a clear message rather than adding the remote
 automatically.
 
+Preflight validation SHOULD verify that configured apps can be resolved by their
+configured remote before uninstalling tracked apps. If a configured app cannot be
+resolved, reconciliation SHOULD fail before making install, uninstall, config, or
+state changes.
+
 #### App-only management
 
 The software manages Flatpak apps only. Runtime and extension installs SHOULD be
@@ -135,6 +141,11 @@ If a user-installed Flatpak app is tracked but not present in config, uninstall
 it from the user installation and untrack it. This removal is automatic and MUST
 only apply to tracked user-installed apps.
 
+If state is stale and the tracked installed ref does not match actual Flatpak
+state, the implementation MUST still use the tracked app ID to identify installed
+user apps that are eligible for removal. Stale state MUST NOT cause tracked
+installed apps to be silently untracked while leaving them installed.
+
 Removals SHOULD happen before installs after preflight validation succeeds. This
 keeps branch or remote changes simple: a tracked app whose installed qualified
 ref no longer matches config can be removed first, then installed from the
@@ -144,6 +155,11 @@ configured ref.
 
 If an installed Flatpak app is present in config but not tracked in state, track
 it.
+
+After installing a Flatpak app, persisted state MUST describe the actual
+installed app as reported by Flatpak, including the resolved installed ref when
+available. Persisted state MUST NOT assume that the configured value is identical
+to the resolved installed ref.
 
 Standard operation MUST be idempotent. Running the software repeatedly with the
 same installed apps and config MUST result in no additional changes after the

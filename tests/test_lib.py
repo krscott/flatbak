@@ -118,6 +118,38 @@ def test_reconcile_installs_missing_configured_app(tmp_path: Path) -> None:
     assert flatpak.installs == ["flathub org.mozilla.firefox"]
 
 
+def test_reconcile_persists_resolved_ref_after_install(tmp_path: Path) -> None:
+    paths = Paths(config_dir=tmp_path / "config", data_dir=tmp_path / "data")
+    paths.config_dir.mkdir()
+    (paths.config_dir / "root.txt").write_text("org.mozilla.firefox\n")
+
+    class ResolvingFlatpak(FakeFlatpak):
+        def install(self, entry: object) -> None:
+            super().install(entry)
+            assert isinstance(entry, ConfigEntry)
+            self.apps.append(
+                InstalledApp(
+                    app_id=entry.app_id,
+                    remote=entry.effective_remote,
+                    arch="x86_64",
+                    branch="stable",
+                )
+            )
+
+    flatpak = ResolvingFlatpak([])
+
+    reconcile(Options(), paths, flatpak)
+
+    state = load_state(paths.data_dir / "state.json")
+    assert state.tracked_apps == [
+        TrackedApp(
+            app_id="org.mozilla.firefox",
+            installed_ref="app/org.mozilla.firefox/x86_64/stable",
+            source="org.mozilla.firefox",
+        )
+    ]
+
+
 def test_qualified_ref_without_remote_matches_flathub_install(tmp_path: Path) -> None:
     paths = Paths(config_dir=tmp_path / "config", data_dir=tmp_path / "data")
     paths.config_dir.mkdir()
@@ -197,6 +229,89 @@ def test_reconcile_removes_mismatched_branch_before_installing_configured_ref(
     assert result.installed == ["app/org.mozilla.firefox/x86_64/stable"]
     assert flatpak.uninstalls == ["app/org.mozilla.firefox/x86_64/beta"]
     assert flatpak.installs == ["flathub app/org.mozilla.firefox/x86_64/stable"]
+
+
+def test_reconcile_removes_tracked_app_when_stored_ref_is_stale(
+    tmp_path: Path,
+) -> None:
+    paths = Paths(config_dir=tmp_path / "config", data_dir=tmp_path / "data")
+    paths.config_dir.mkdir()
+    (paths.config_dir / "root.txt").write_text("")
+    save_state(
+        paths.data_dir / "state.json",
+        State(
+            tracked=[
+                TrackedApp(
+                    app_id="org.mozilla.firefox",
+                    installed_ref="app/org.mozilla.firefox/x86_64/stable",
+                )
+            ]
+        ),
+    )
+    flatpak = FakeFlatpak(
+        [
+            InstalledApp(
+                app_id="org.mozilla.firefox",
+                remote="flathub",
+                arch="x86_64",
+                branch="beta",
+            )
+        ]
+    )
+
+    result = reconcile(Options(), paths, flatpak)
+
+    assert result.removed == ["app/org.mozilla.firefox/x86_64/beta"]
+    assert flatpak.uninstalls == ["app/org.mozilla.firefox/x86_64/beta"]
+    assert load_state(paths.data_dir / "state.json").tracked_apps == []
+
+
+def test_reconcile_does_not_remove_before_unresolvable_install(
+    tmp_path: Path,
+) -> None:
+    paths = Paths(config_dir=tmp_path / "config", data_dir=tmp_path / "data")
+    paths.config_dir.mkdir()
+    (paths.config_dir / "root.txt").write_text(
+        "app/org.mozilla.firefox/x86_64/stable\n"
+    )
+    save_state(
+        paths.data_dir / "state.json",
+        State(
+            tracked=[
+                TrackedApp(
+                    app_id="org.mozilla.firefox",
+                    installed_ref="app/org.mozilla.firefox/x86_64/beta",
+                )
+            ]
+        ),
+    )
+
+    class InstallFailsFlatpak(FakeFlatpak):
+        def install(self, entry: object) -> None:
+            raise ValueError("No such ref")
+
+    flatpak = InstallFailsFlatpak(
+        [
+            InstalledApp(
+                app_id="org.mozilla.firefox",
+                remote="flathub",
+                arch="x86_64",
+                branch="beta",
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="No such ref"):
+        reconcile(Options(), paths, flatpak)
+
+    assert flatpak.uninstalls == []
+    state = load_state(paths.data_dir / "state.json")
+    assert state.tracked_apps == [
+        TrackedApp(
+            app_id="org.mozilla.firefox",
+            installed_ref="app/org.mozilla.firefox/x86_64/beta",
+        )
+    ]
 
 
 def test_reconcile_removes_mismatched_remote_before_installing_configured_ref(
